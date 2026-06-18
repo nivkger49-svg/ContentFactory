@@ -1,0 +1,80 @@
+# Keep this project separate from website repositories.
+# Template repo: track tooling, schema, rules, and generic docs only.
+
+# Secrets
+.env
+*.key
+*.pem
+
+# Local databases
+db/*
+!db/
+!db/schema.sql
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# User/campaign data
+.cursor/**
+assets/**
+outputs/**
+temp/**
+batches/**
+projects/**
+references/**
+tools/**
+modelscreo.md
+creodraft.md
+
+# Keep empty template folders
+!assets/
+!assets/.gitkeep
+!assets/raw/
+!assets/raw/.gitkeep
+!assets/raw/video/
+!assets/raw/video/.gitkeep
+!assets/raw/images/
+!assets/raw/images/.gitkeep
+!assets/raw/site-recordings/
+!assets/raw/site-recordings/.gitkeep
+!assets/generated/
+!assets/generated/.gitkeep
+!assets/generated/images/
+!assets/generated/images/.gitkeep
+!assets/voice/
+!assets/voice/.gitkeep
+!outputs/
+!outputs/.gitkeep
+!outputs/drafts/
+!outputs/drafts/.gitkeep
+!batches/
+!batches/.gitkeep
+!projects/
+!projects/.gitkeep
+!references/
+!references/.gitkeep
+!temp/
+!temp/.gitkeep
+
+# Reports: allow only generic operating docs.
+reports/**
+!reports/
+!reports/asset-intake-workflow.md
+!reports/codex-patch-asset-priority-scoring.md
+!reports/creative-generation-process.md
+!reports/creative-hypothesis-matrix.md
+!reports/cursor-update-asset-priority-2026-06-16.md
+!reports/cursor-rules-template.md
+!reports/factory-operating-protocol.md
+!reports/hook-script-tracking.md
+!reports/language-policy.md
+!reports/storyboard-schema.md
+
+# Python/cache
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Campaign-specific seed/import helpers
+scripts/import_hook_bank_2026_06_16.py
+scripts/seed_hooks.py
