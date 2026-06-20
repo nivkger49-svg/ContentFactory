@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ContentFactory Creative Metadata",
+  "type": "object",
+  "required": [
+    "creative_id",
+    "source_video",
+    "title",
+    "language",
+    "format",
+    "pain",
+    "angle",
+    "hook",
+    "offer",
+    "cta",
+    "voiceover_text"
+  ],
+  "properties": {
+    "creative_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_video": {
+      "type": "string",
+      "minLength": 1
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "language": {
+      "type": "string",
+      "enum": [
+        "UA",
+        "RU",
+        "EN"
+      ]
+    },
+    "format": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pain": {
+      "type": "string",
+      "minLength": 1
+    },
+    "angle": {
+      "type": "string",
+      "minLength": 1
+    },
+    "hook": {
+      "type": "string",
+      "minLength": 1
+    },
+    "offer": {
+      "type": "string",
+      "minLength": 1
+    },
+    "cta": {
+      "type": "string",
+      "enum": [
+        "LEARN_MORE",
+        "SIGN_UP",
+        "DOWNLOAD",
+        "APPLY_NOW"
+      ]
+    },
+    "voiceover_text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "production_status": {
+      "type": "string",
+      "enum": [
+        "DRAFT",
+        "FINAL"
+      ]
+    },
+    "avatar_state": {
+      "type": "string"
+    },
+    "trigger": {
+      "type": "string"
+    },
+    "visual_hook": {
+      "type": "string"
+    },
+    "visual_concept": {
+      "type": "string"
+    },
+    "proof": {
+      "type": "string"
+    },
+    "creative_mechanism": {
+      "type": "string"
+    },
+    "result": {
+      "type": "string"
+    },
+    "overlay_text": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "matrix": {
+      "type": "object"
+    },
+    "scenes": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  },
+  "additionalProperties": true
+}

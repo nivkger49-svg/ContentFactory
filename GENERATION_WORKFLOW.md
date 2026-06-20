@@ -2,6 +2,22 @@
 
 This is the durable creative workflow. Use it before every serious render.
 
+<<<<<<< HEAD
+=======
+
+## Project Boundary Rule
+
+This ContentFactory project is isolated.
+
+Work only inside:
+
+- `/Users/mister/Documents/ContentFactory`
+
+Never use `/Users/mister/Documents/New project` for ContentFactory sources, temp files, overlays, subtitles, renders, or exports.
+
+Never modify the NeiroKid project while doing ContentFactory work unless the user explicitly switches tasks.
+
+>>>>>>> 3e268fc (Add isolated ContentFactory workflow and render tooling)
 Primary rendering spec for NeiroKid creatives:
 
 - `reports/neirokid-video-rendering-requirements-v1.md`
@@ -82,6 +98,25 @@ Avoid:
 
 Before using a screen recording scene, extract a preview frame from the exact timestamp and verify readability.
 
+## Final Delivery Rule
+
+A ContentFactory render is not considered complete until the final delivery contains both:
+
+- final video: `video_name.mp4`
+- metadata sidecar: `video_name.creative.json`
+
+This is mandatory for all videos produced by the flow.
+
+Required behavior:
+
+- generate the final MP4
+- generate the matching `.creative.json` sidecar
+- place both files next to each other in the final output folder
+- keep `source_video` inside the JSON exactly equal to the MP4 filename
+- do not mark the render `READY`, `FINAL`, or delivered if the sidecar is missing
+
+The sidecar exists so downstream analysis, registry import, hypothesis mapping, and archival do not rely on filename guessing or speech-to-text reconstruction.
+
 ## CTA Rule
 
 Use dedicated CTA backgrounds from the DB:
@@ -113,7 +148,24 @@ Use one clear subtitle mode:
 
 Do not mix full subtitles and bullet subtitles without a reason.
 
+For the current NeiroKid production flow, keep the existing subtitle pipeline:
+
+1. generate or update the final voiceover;
+2. generate timing from that voiceover;
+3. build `ASS` subtitles;
+4. burn subtitles into the final MP4 through FFmpeg `subtitles=...`.
+
+Do not invent a replacement subtitle flow without explicit user approval.
+Do not switch to image overlays, manual frame painting, or alternate subtitle engines if the existing `ASS` flow can be restored.
+
 For screen recordings, move subtitles away from important UI or reduce them to compact bullets.
+
+For `9:16` NeiroKid renders, subtitle phrases must be split into short semantic blocks so they fit comfortably on screen:
+
+- one screen = one short thought;
+- prefer `2-4` words per block;
+- do not leave long full-sentence subtitle lines unbroken;
+- if a phrase does not fit cleanly, split it before rendering instead of shrinking the whole style.
 
 If ElevenLabs or another voice tool does not provide SRT, use **local faster-whisper** (default — do not use paid/trial ASR):
 
@@ -124,6 +176,10 @@ F:\ContentFactory\tools\asr\.venv\Scripts\python.exe F:\ContentFactory\scripts\t
 Outputs `voice.srt` + `voice.txt` beside the audio. Models cache: `F:\ContentFactory\tools\asr\models`.
 
 Run ASR on **every new or changed** `assets/voice/*.mp3` before building bullet ASS. Use SRT timestamps as timing truth; review Ukrainian wording before render. See `.cursor/rules/local-asr.mdc`.
+
+If the default system `ffmpeg` lacks subtitle support, keep the same flow and use an `ffmpeg` binary that includes `libass`. This is still the same production flow, not a new one.
+
+For this local project, the subtitle burn step may use the `imageio_ffmpeg` bundled binary because it includes `libass`.
 
 ## Language Rule
 

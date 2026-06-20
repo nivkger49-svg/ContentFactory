@@ -22,6 +22,7 @@ This file is the practical map of the local ContentFactory installation.
 - `scripts/audit_asset.py`: add or inspect scene-level audit rows used by the ranker.
 - `scripts/pexels_video.py`: search/download Pexels videos.
 - `scripts/generate_elevenlabs_voice.py`: create `assets/voice/*.mp3` from script text via ElevenLabs and then run local transcription.
+- `scripts/run_contentfactory_pipeline.py`: run the current end-to-end flow in one command.
 - `scripts/pick_assets.py`: rank assets, plan missing scenes, record storyboard usage.
 - `scripts/transcribe_audio.py`: create local SRT/TXT from audio with faster-whisper.
 - `scripts/add_idea.py` and `scripts/list_ideas.py`: simple idea helpers.
@@ -70,6 +71,19 @@ Generate a voiceover from text and auto-create local SRT/TXT:
 ```bash
 python3 scripts/generate_elevenlabs_voice.py --text-file projects/my-script.txt --overwrite
 ```
+
+Run the full current chain:
+
+```bash
+python3 scripts/run_contentfactory_pipeline.py --text-file projects/my-script.txt --overwrite
+```
+
+This currently means:
+
+- ElevenLabs voice generation
+- local SRT/TXT generation
+- `render_evening_overload_fresh.py`
+- `burn_evening_overload_bullets.py`
 
 Transcribe audio locally:
 

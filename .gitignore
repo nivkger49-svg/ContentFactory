@@ -1,3 +1,4 @@
+.DS_Store
 # Keep this project separate from website repositories.
 # Template repo: track tooling, schema, rules, and generic docs only.
 
@@ -62,6 +63,9 @@ reports/**
 !reports/asset-intake-workflow.md
 !reports/codex-patch-asset-priority-scoring.md
 !reports/creative-generation-process.md
+!reports/neirokid-video-rendering-requirements-v1.md
+!reports/creative-metadata.schema.json
+!reports/creative-package-spec.md
 !reports/creative-hypothesis-matrix.md
 !reports/cursor-update-asset-priority-2026-06-16.md
 !reports/cursor-rules-template.md
@@ -78,3 +82,6 @@ __pycache__/
 # Campaign-specific seed/import helpers
 scripts/import_hook_bank_2026_06_16.py
 scripts/seed_hooks.py
+
+# Local final renders
+Видео_готовые_с_субтитрами/
