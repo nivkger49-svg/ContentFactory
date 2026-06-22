@@ -1,10 +1,11 @@
-# ContentFactory Publishing Layer
+# ContentFactory Zernio Publishing Module
 
-This folder contains an isolated publishing pipeline for ContentFactory videos.
-It does not modify the existing render pipeline, website code, or other
-repositories. The layer scans ready `.mp4` files, resolves metadata, generates
-Ukrainian captions, and either prepares drafts, schedules posts, or publishes
-through the official Zernio Python SDK.
+This folder contains an isolated Zernio publishing module for ContentFactory
+videos. It does not modify the existing render pipeline, website code, or other
+repositories. The module scans ready `.mp4` files, resolves metadata,
+generates Ukrainian captions, uploads large videos through Vercel Blob when
+needed, and then schedules or publishes posts through the official Zernio
+Python SDK.
 
 Default planner behavior:
 
@@ -14,6 +15,63 @@ Default planner behavior:
 - captions always include a CTA that sends people to the profile bio link
 - captions should feel human, useful, and varied in meaning
 - captions may use a small amount of emoji for rhythm, but not heavily
+
+## Quick Start
+
+1. Open this module only:
+   `/Users/mister/Documents/ContentFactory/publishing`
+2. Read:
+   - `AGENTS.md`
+   - `PLANNER_FLOW_RULES.md`
+   - this `README.md`
+3. Use the validated Python 3.12 environment:
+   - `./.venv-py312/bin/python`
+4. Confirm local `.env` contains:
+   - `ZERNIO_API_KEY`
+   - `ZERNIO_PROFILE_ID`
+   - `VERCEL_BLOB_TOKEN` or
+     `BLOB_READ_WRITE_TOKEN_READ_WRITE_TOKEN`
+5. Run either:
+   - preview: `python3 scripts/dry_run.py`
+   - live planner batch:
+     `./.venv-py312/bin/python scripts/schedule_all.py`
+
+## First Run Checklist
+
+- Confirm git root is `ContentFactory`
+- Confirm you are not working in `New project` or `neirokid-ads-agent`
+- Confirm `.env` exists locally and is not staged
+- Confirm `PUBLISH_MODE=schedule` for planner work
+- Confirm `DAILY_POSTING_SLOTS=08:00,18:00`
+- Confirm the Blob token is available for videos over 4MB
+- Confirm the active target platform is actually connected in Zernio
+
+## Known Live Setup
+
+- Module name: `ContentFactory Zernio Publishing Module`
+- Validated runtime:
+  - `publishing/.venv-py312`
+- Validated connected platform:
+  - Instagram `neirokidapp`
+- Current planner cadence:
+  - `08:00` and `18:00` Bucharest time
+- Queue policy:
+  - next `5` videos at a time
+- Posting density:
+  - `2` videos per day
+
+## Common Failure Cases
+
+- Missing Blob token:
+  large videos cannot upload, planner run must stop
+- Wrong Python runtime:
+  system Python 3.9 is not the validated live runtime
+- SDK response shape mismatch:
+  fix adapter code in `src/zernio_client.py` or `src/publish_worker.py`
+- Connected account mismatch:
+  do not assume TikTok exists unless the live Zernio account list confirms it
+- Old duplicate scheduled post:
+  inspect live scheduled posts before bulk rescheduling
 
 ## Isolation Rules
 

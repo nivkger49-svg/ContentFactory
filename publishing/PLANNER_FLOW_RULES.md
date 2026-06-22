@@ -1,7 +1,11 @@
 # Planner Flow Rules
 
-These rules define how the isolated `ContentFactory/publishing` layer must work
-with the Zernio planner.
+These rules define how the isolated `ContentFactory Zernio Publishing Module`
+must work with the Zernio planner.
+
+Module label:
+
+- `ContentFactory Zernio Publishing Module`
 
 ## Mandatory Entry Point
 
@@ -9,6 +13,8 @@ with the Zernio planner.
   - `AGENTS.md`
   - `README.md`
   - this file
+- These three files are intended to be sufficient for a fresh agent who only
+  downloaded the module from git.
 
 ## Scope
 
