@@ -114,9 +114,11 @@ The agent must treat the second name as an accepted alias for the first.
 
 ## Platform Rule
 
-- The currently validated connected target is Instagram account `neirokidapp`.
-- TikTok is not currently validated in this profile and must not be assumed to
-  work unless explicitly confirmed by the agent from live account data.
+- The currently validated connected targets are:
+  - Instagram `neirokidapp`
+  - TikTok `aineirokid`
+- The default live flow should target both connected accounts unless the user
+  explicitly requests otherwise.
 
 ## State Rule
 

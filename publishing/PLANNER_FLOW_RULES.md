@@ -136,11 +136,11 @@ Module label:
 
 ## Validated Platform Target
 
-- The currently validated connected social account is Instagram:
-  - username: `neirokidapp`
+- The currently validated connected social accounts are:
+  - Instagram: `neirokidapp`
+  - TikTok: `aineirokid`
   - profile id: `6a3807977183d73693c67dae`
-- TikTok is not currently validated in the live profile and must not be assumed
-  available without a fresh check.
+- The default live publishing flow should schedule to both accounts.
 
 ## State Files
 
