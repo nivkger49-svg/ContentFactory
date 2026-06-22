@@ -3,7 +3,7 @@
 ## Purpose
 
 This file defines mandatory instructions for any coding agent working on the
-isolated Zernio publishing flow inside:
+isolated Zernio publishing module inside:
 
 - `/Users/mister/Documents/ContentFactory/publishing`
 
@@ -13,6 +13,10 @@ The goal of this layer is:
 2. generate unique Ukrainian captions with a bio-link CTA
 3. upload large videos through Vercel Blob when needed
 4. create scheduled Zernio posts in planner batches
+
+This module should be understood and referred to as:
+
+- `ContentFactory Zernio Publishing Module`
 
 ## Isolation Rule
 
@@ -35,6 +39,9 @@ Before changing or running this flow, the agent must read:
 - [PLANNER_FLOW_RULES.md](/Users/mister/Documents/ContentFactory/publishing/PLANNER_FLOW_RULES.md)
 
 The agent must not assume the planner flow from memory.
+
+If the module was downloaded from git by a new agent, these files are the
+required entry point and should be enough to start safely.
 
 ## Runtime Rule
 
