@@ -208,8 +208,12 @@ connected Instagram/TikTok accounts inside the configured profile. By default,
 the worker looks for `instagram` and `tiktok` accounts inside
 `ZERNIO_PROFILE_ID`, but this can be overridden with `TARGET_PLATFORMS`.
 
-The currently validated live connected target is Instagram account
-`neirokidapp`. TikTok should not be assumed live unless it is verified again.
+The currently validated live connected targets are:
+
+- Instagram `neirokidapp`
+- TikTok `aineirokid`
+
+The default live publishing flow should target both accounts.
 
 Zernio direct upload works only for files up to 4MB. For normal `.mp4` video
 publishing, add a `VERCEL_BLOB_TOKEN` so the worker can call the SDK's large
