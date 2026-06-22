@@ -85,3 +85,15 @@ scripts/seed_hooks.py
 
 # Local final renders
 Видео_готовые_с_субтитрами/
+Видео_готовые_с_субтитрами/*.mp4
+
+# Isolated publishing layer local runtime
+publishing/.env
+publishing/.venv/
+publishing/.venv-py312/
+publishing/src/__pycache__/
+publishing/src/contentfactory_publishing.egg-info/
+publishing/data/*.log
+publishing/data/publishing-state.json
+publishing/data/publishing-queue.json
+publishing/data/published-log.json
