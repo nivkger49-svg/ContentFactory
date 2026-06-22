@@ -26,6 +26,7 @@ class Config:
     publishing_root: Path
     contentfactory_root: Path
     ready_videos_dir: Path
+    ready_carousels_dir: Path
     video_meta_json: Path
     default_language: str
     publish_mode: str
@@ -60,6 +61,12 @@ def load_config() -> Config:
             str(contentfactory_root / "Видео_готовые_с_субтитрами"),
         )
     ).expanduser()
+    ready_carousels_dir = Path(
+        os.getenv(
+            "READY_CAROUSELS_DIR",
+            str(contentfactory_root / "Карусели_готовые"),
+        )
+    ).expanduser()
     video_meta_json = Path(
         os.getenv("VIDEO_META_JSON", str(contentfactory_root / "video_meta.json"))
     ).expanduser()
@@ -89,6 +96,7 @@ def load_config() -> Config:
         publishing_root=publishing_root,
         contentfactory_root=contentfactory_root,
         ready_videos_dir=ready_videos_dir,
+        ready_carousels_dir=ready_carousels_dir,
         video_meta_json=video_meta_json,
         default_language=os.getenv("DEFAULT_LANGUAGE", "uk").strip() or "uk",
         publish_mode=publish_mode,

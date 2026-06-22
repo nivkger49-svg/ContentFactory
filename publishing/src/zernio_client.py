@@ -29,6 +29,18 @@ def _payload_list(payload: object, key: str) -> List[Dict[str, object]]:
     return value if isinstance(value, list) else []
 
 
+def _extract_uploaded_media_url(payload: object) -> Optional[str]:
+    direct = _payload_get(payload, "publicUrl", "url", "downloadUrl")
+    if direct:
+        return direct
+
+    files = _payload_list(payload, "files")
+    if files:
+        first = files[0]
+        return _item_get(first, "url") or _item_get(first, "publicUrl")
+    return None
+
+
 def _item_get(item: object, key: str, default: object = None) -> object:
     if isinstance(item, dict):
         return item.get(key, default)
@@ -146,30 +158,50 @@ class ZernioClient:
                 return {"id": str(account_id)}
         return None
 
-    def upload_media(self, video_path: Path) -> str:
-        logger.info("Uploading media to Zernio: %s", video_path.name)
-        if video_path.stat().st_size > 4 * 1024 * 1024:
+    def upload_media_item(self, media_path: Path, media_type: Optional[str] = None) -> Dict[str, str]:
+        logger.info("Uploading media to Zernio: %s", media_path.name)
+        if media_path.stat().st_size > 4 * 1024 * 1024:
             if not self.config.vercel_blob_token:
                 raise RuntimeError(
-                    "Large video upload requires VERCEL_BLOB_TOKEN in publishing/.env."
+                    "Large media upload requires VERCEL_BLOB_TOKEN in publishing/.env."
                 )
             payload = self._sdk().media.upload_large(
-                str(video_path),
+                str(media_path),
                 vercel_token=self.config.vercel_blob_token,
             )
         else:
-            payload = self._sdk().media.upload(str(video_path))
+            payload = self._sdk().media.upload(str(media_path))
 
-        media_url = _payload_get(payload, "publicUrl", "url", "downloadUrl")
+        media_url = _extract_uploaded_media_url(payload)
         if not media_url:
             raise RuntimeError("Zernio media upload did not return a public URL.")
-        return str(media_url)
+
+        resolved_type = media_type or ("video" if media_path.suffix.lower() == ".mp4" else "image")
+        return {
+            "type": resolved_type,
+            "url": str(media_url),
+        }
+
+    def upload_media_batch(
+        self,
+        media_paths: List[Path],
+        media_type: Optional[str] = None,
+    ) -> List[Dict[str, str]]:
+        return [
+            self.upload_media_item(media_path, media_type=media_type)
+            for media_path in media_paths
+        ]
+
+    def upload_media(self, video_path: Path) -> str:
+        return self.upload_media_item(video_path, media_type="video")["url"]
 
     def create_post(
         self,
         caption: str,
-        media_url: str,
+        media_items: List[Dict[str, str]],
         title: str,
+        content_type: str,
+        platform_content: Dict[str, str],
         scheduled_for: Optional[str],
         publish_now: bool,
     ) -> Dict[str, object]:
@@ -177,15 +209,13 @@ class ZernioClient:
         for platform in platforms:
             if platform["platform"] == "youtube":
                 platform["youtubeTitle"] = title
+            custom_content = str(platform_content.get(platform["platform"]) or "").strip()
+            if custom_content:
+                platform["customContent"] = custom_content
 
         payload = {
             "content": caption,
-            "media_items": [
-                {
-                    "type": "video",
-                    "url": media_url,
-                }
-            ],
+            "media_items": media_items,
             "platforms": platforms,
             "timezone": self.config.timezone,
         }
@@ -201,4 +231,6 @@ class ZernioClient:
             len(platforms),
             "publish" if publish_now else "schedule",
         )
+        if content_type == "carousel":
+            logger.info("Carousel flow enabled; TikTok uses short customContent when configured.")
         return self._sdk().posts.create(**payload)

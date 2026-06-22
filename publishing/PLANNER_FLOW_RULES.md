@@ -21,22 +21,34 @@ Module label:
 - Work only inside `/Users/mister/Documents/ContentFactory/publishing`.
 - Read ready videos only from:
   `/Users/mister/Documents/ContentFactory/Видео_готовые_с_субтитрами`
+- Read ready carousels only from:
+  `/Users/mister/Documents/ContentFactory/Карусели_готовые`
 - Do not touch website repositories, NeiroKid frontend/backend, or other
   projects.
 
 ## Source of Truth
 
 - A video is eligible when a new `.mp4` appears in the ready videos folder.
+- A carousel is eligible when a new folder appears in the ready carousels
+  folder and contains at least 2 valid images.
 - Metadata is resolved in this order:
   1. `VIDEO_META_JSON`
   2. matching sidecar `*.creative.json`
+- Carousel metadata is resolved from:
+  1. `carousel.json`
+  2. `manifest.json`
+  3. `<folder-name>.creative.json`
 - A video already marked as `scheduled`, `published`, or `published_now` in
   `publishing-state.json` must not be queued again.
+- A carousel folder already marked as `scheduled`, `published`, or
+  `published_now` in `publishing-state.json` must not be queued again.
 
 ## Queue Rules
 
 - Every new `.mp4` must automatically enter the publishing flow.
+- Every new valid carousel folder must automatically enter the publishing flow.
 - `publishing-queue.json` is the working queue for unsent videos.
+- The queue may contain both `reel` and `carousel` items.
 - Existing queued items must refresh their generated caption on every new run,
   so the queue always reflects the latest caption rules.
 - The queue is persistent. If only part of the queue is sent to the planner,
@@ -69,6 +81,7 @@ Module label:
 ## Caption Rules
 
 - Each planned video must have a unique Ukrainian caption.
+- Each planned carousel must have a unique Ukrainian caption.
 - Captions should use metadata such as title, hook, pain, angle, offer, and
   voiceover when available.
 - Every caption must end with a CTA that points users to the link in the
@@ -90,6 +103,31 @@ Module label:
 - Avoid overly generic filler such as empty reassurance without a concrete
   parent insight.
 
+## TikTok Carousel Text Rules
+
+- TikTok photo carousel posts must not reuse the full Instagram caption.
+- In live API behavior, TikTok uses carousel post content as a short photo
+  title and rejects long text.
+- Safe rule for this module:
+  keep TikTok carousel text within `90` characters.
+- TikTok carousel text should still sound human, but it must be short and
+  direct.
+- Prefer:
+  - one insight
+  - one emotional reframe
+  - one compact CTA
+- Avoid:
+  - long paragraph captions
+  - large hashtag blocks
+  - multiline Instagram-style storytelling
+- The module should send TikTok carousel text through platform-specific
+  `customContent`, while Instagram continues to use the main `content`.
+- Manifest priority for TikTok carousel short text:
+  1. `tiktok_caption_override`
+  2. `tiktok_title`
+  3. `tiktok_hook`
+  4. auto-generated fallback from existing metadata
+
 ## Planner Mode
 
 - Default safe mode is `draft`.
@@ -108,6 +146,7 @@ Module label:
 
 - Zernio direct upload works only for files up to `4MB`.
 - Most real `.mp4` videos in this project are larger than that.
+- Large carousel images may also require Blob upload.
 - For large files, the agent must use the SDK large upload flow via
   `VERCEL_BLOB_TOKEN`.
 - `BLOB_READ_WRITE_TOKEN_READ_WRITE_TOKEN` is accepted as an alias source for
@@ -121,6 +160,7 @@ Module label:
 - `ZERNIO_API_KEY`
 - `ZERNIO_PROFILE_ID`
 - `VERCEL_BLOB_TOKEN` for large videos
+- `READY_CAROUSELS_DIR` for carousel source folders
 - or `BLOB_READ_WRITE_TOKEN_READ_WRITE_TOKEN` as an accepted alias for the same token
 - `PUBLISH_MODE=schedule`
 - `PLANNER_BATCH_SIZE=5`
@@ -141,6 +181,9 @@ Module label:
   - TikTok: `aineirokid`
   - profile id: `6a3807977183d73693c67dae`
 - The default live publishing flow should schedule to both accounts.
+- Special live note:
+  Instagram carousel flow is compatible with long captions.
+  TikTok carousel flow requires short platform-specific text.
 
 ## State Files
 
@@ -160,16 +203,18 @@ Module label:
 3. Use the Python 3.12 venv for live planner commands.
 4. Verify planner mode is `schedule`.
 5. Scan the ready videos folder for new `.mp4` files.
-6. Resolve metadata from `video_meta.json` or `*.creative.json`.
-7. Refresh queued captions so current CTA rules apply.
-8. Build the next planner window of `5` videos.
-9. Schedule only `2` videos per day into the next available planner slots.
-10. Upload media through Zernio.
-11. If file size exceeds `4MB`, switch to large upload using Blob token.
-12. Create scheduled Zernio posts, not immediate publishes.
-13. Update `publishing-state.json`, `publishing-queue.json`, and
+6. Scan the ready carousel folder for new carousel directories.
+7. Resolve reel metadata from `video_meta.json` or `*.creative.json`.
+8. Resolve carousel metadata from local manifest files.
+9. Refresh queued captions so current CTA rules apply.
+10. Build the next planner window of `5` items.
+11. Schedule only `2` posts per day into the next available planner slots.
+12. Upload media through Zernio.
+13. If file size exceeds `4MB`, switch to large upload using Blob token.
+14. Create scheduled Zernio posts, not immediate publishes.
+15. Update `publishing-state.json`, `publishing-queue.json`, and
     `published-log.json`.
-14. Verify the scheduled items were recorded in state/log.
+16. Verify the scheduled items were recorded in state/log.
 
 ## Canonical Commands
 
@@ -200,6 +245,12 @@ cd /Users/mister/Documents/ContentFactory/publishing
   dicts.
 - Account objects use `field_id` in several places instead of `id`.
 - Post creation must use `media_items`, not `media_urls`.
+- Carousel posts are image-only and must send `2-10` image items in
+  `media_items`.
+- Zernio image upload responses may return URLs under `files[].url`, not only
+  `publicUrl`.
+- TikTok photo carousel posts fail if long Instagram-style content is sent as
+  the shared post body.
 - Large uploads require the `vercel` Python package in the venv.
 - If the scheduling script prints a serialization error after scheduling work,
   verify state/log before retrying because post creation may already have
@@ -219,10 +270,35 @@ Before sending a planner batch, the agent should quickly sanity-check:
 
 - If planner submission fails before a video is scheduled, keep the video in the
   queue.
+- If planner submission fails before a carousel is scheduled, keep the carousel
+  in the queue.
 - Do not mark a video as `scheduled` unless Zernio confirms post creation.
+- Do not mark a carousel as `scheduled` unless Zernio confirms post creation.
 - If upload is blocked by missing large-file token, do not remove the item from
   the queue.
 - If only some of the 5 videos succeed, preserve the remaining unsent items for
   the next run.
 - If an SDK field shape changes, fix the adapter in `src/zernio_client.py` or
   `src/publish_worker.py` instead of editing state by hand.
+- If TikTok rejects a carousel because of text length, do not retry with the
+  same shared caption. Fix the TikTok-specific short text flow first.
+
+## Carousel Packaging Rules
+
+- One carousel equals one folder inside `READY_CAROUSELS_DIR`.
+- Preferred folder shape:
+  - `carousel.json`
+  - `images/01.jpg`
+  - `images/02.jpg`
+- Supported manifest names:
+  - `carousel.json`
+  - `manifest.json`
+  - `<folder-name>.creative.json`
+- Manifest may list slides explicitly in `slides` or `images`.
+- If no slide list is provided, the worker infers images from the folder.
+- Supported slide extensions:
+  - `jpg`
+  - `jpeg`
+  - `png`
+  - `webp`
+- Carousel captions follow the same Ukrainian text rules as reels.

@@ -86,6 +86,7 @@ scripts/seed_hooks.py
 # Local final renders
 Видео_готовые_с_субтитрами/
 Видео_готовые_с_субтитрами/*.mp4
+Карусели_готовые/
 
 # Isolated publishing layer local runtime
 publishing/.env

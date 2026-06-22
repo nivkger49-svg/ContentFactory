@@ -10,8 +10,9 @@ isolated Zernio publishing module inside:
 The goal of this layer is:
 
 1. detect new ready `.mp4` videos
+2. detect new prepared carousel folders
 2. generate unique Ukrainian captions with a bio-link CTA
-3. upload large videos through Vercel Blob when needed
+3. upload large media through Vercel Blob when needed
 4. create scheduled Zernio posts in planner batches
 
 This module should be understood and referred to as:
@@ -63,6 +64,7 @@ Required:
 
 - `ZERNIO_API_KEY`
 - `ZERNIO_PROFILE_ID`
+- `READY_CAROUSELS_DIR`
 - `PUBLISH_MODE=schedule`
 - `PLANNER_BATCH_SIZE=5`
 - `MAX_POSTS_PER_DAY=2`
@@ -78,7 +80,9 @@ The agent must treat the second name as an accepted alias for the first.
 ## Planner Behavior Rule
 
 - Every new `.mp4` in `../Видео_готовые_с_субтитрами/` must enter the queue.
+- Every new valid carousel folder in `../Карусели_готовые/` must enter the same queue.
 - Only the next 5 queued videos should be sent to planner in one run.
+- The queue may contain both `reel` and `carousel` entries.
 - Schedule only 2 posts per day.
 - Captions must be in Ukrainian.
 - Every caption must contain a CTA that sends the user to the profile bio link.
@@ -109,8 +113,35 @@ The agent must treat the second name as an accepted alias for the first.
 ## Upload Rule
 
 - Videos over 4MB cannot use Zernio direct upload.
+- Carousel images over 4MB cannot use Zernio direct upload either.
 - Large `.mp4` uploads must go through Vercel Blob via the SDK large upload flow.
 - If a valid Blob token is missing, the agent must stop and report the blocker.
+
+## Carousel Rule
+
+- Carousel posts are image-only.
+- Each carousel must contain between `2` and `10` images.
+- Supported slide formats:
+  - `jpg`
+  - `jpeg`
+  - `png`
+  - `webp`
+- Preferred structure:
+  - one folder per carousel
+  - `carousel.json` or `manifest.json`
+  - `images/` subfolder with ordered slides
+- If no slide list is declared in the manifest, the worker will infer images
+  from the folder.
+- Instagram carousel posts may use long human captions.
+- TikTok carousel posts must not reuse the long Instagram caption as-is.
+- For TikTok photo carousels, the short text should stay within about `90`
+  characters because TikTok uses it like a slideshow title.
+- The module must send TikTok carousel text through platform-specific
+  `customContent`.
+- Preferred manifest fields for TikTok-specific copy:
+  - `tiktok_caption_override`
+  - `tiktok_title`
+  - `tiktok_hook`
 
 ## Platform Rule
 
@@ -119,6 +150,9 @@ The agent must treat the second name as an accepted alias for the first.
   - TikTok `aineirokid`
 - The default live flow should target both connected accounts unless the user
   explicitly requests otherwise.
+- Exception:
+  carousel posts require a TikTok-specific short text flow; if that short text
+  is missing or broken, do not blindly send the Instagram caption to TikTok.
 
 ## State Rule
 

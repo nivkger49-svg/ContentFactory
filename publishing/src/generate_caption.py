@@ -52,6 +52,15 @@ BIO_CTA_VARIANTS = [
     "Тисніть на посилання в шапці профілю, щоб отримати вправи та рекомендації під потреби вашої дитини.",
 ]
 
+CTA_FOLLOWUP_VARIANTS = [
+    "Там ви зможете пройти коротке опитування й отримати персональні рекомендації.",
+    "Там на вас чекає коротке опитування і персональний маршрут підтримки.",
+    "Саме там можна швидко підібрати вправи під вашу ситуацію.",
+]
+
+TIKTOK_SHORT_CTA = "Посилання в шапці профілю."
+TIKTOK_MAX_PHOTO_TITLE_CHARS = 90
+
 
 def _pick(options: List[str], seed: str, salt: str) -> str:
     digest = hashlib.sha256(f"{seed}:{salt}".encode("utf-8")).hexdigest()
@@ -77,22 +86,90 @@ def _resolve_cta(meta: VideoMeta) -> str:
         return bio_cta
     if meta.cta:
         base_cta = _clean_text(meta.cta)
+        lower_cta = base_cta.lower()
+        if "шап" in lower_cta and "проф" in lower_cta:
+            followup = _pick(CTA_FOLLOWUP_VARIANTS, seed, "cta-followup")
+            return f"{base_cta.rstrip('.')} — {followup}"
         return f"{base_cta} {bio_cta}"
     return bio_cta
 
 
+def _normalize_multiline_text(value: str) -> str:
+    lines = [line.strip() for line in str(value or "").splitlines() if line.strip()]
+    return "\n\n".join(lines)
+
+
+def _truncate_for_tiktok(text: str) -> str:
+    compact = _clean_text(text)
+    if len(compact) <= TIKTOK_MAX_PHOTO_TITLE_CHARS:
+        return compact
+
+    clipped = compact[: TIKTOK_MAX_PHOTO_TITLE_CHARS - 1].rstrip(" ,.-")
+    return f"{clipped}…"
+
+
+def generate_tiktok_carousel_caption(meta: VideoMeta) -> str:
+    override = _clean_text(str(meta.raw.get("tiktok_caption_override") or ""))
+    if override:
+        return _truncate_for_tiktok(override)
+
+    explicit_short = _clean_text(str(meta.raw.get("tiktok_title") or ""))
+    if explicit_short:
+        return _truncate_for_tiktok(explicit_short)
+
+    opening = _clean_text(
+        str(
+            meta.raw.get("tiktok_hook")
+            or meta.hook
+            or meta.title
+            or meta.pain
+            or meta.angle
+            or ""
+        )
+    )
+    if opening and opening.lower().startswith("01_"):
+        opening = ""
+    if not opening:
+        opening = "Підтримка для дитини починається з розуміння."
+
+    candidate = f"{opening} {TIKTOK_SHORT_CTA}".strip()
+    if len(_clean_text(candidate)) <= TIKTOK_MAX_PHOTO_TITLE_CHARS:
+        return _clean_text(candidate)
+
+    compact_cta = _clean_text(TIKTOK_SHORT_CTA)
+    available_for_opening = TIKTOK_MAX_PHOTO_TITLE_CHARS - len(compact_cta) - 1
+    if opening and available_for_opening > 12:
+        shortened_opening = _truncate_for_tiktok(opening[:available_for_opening].rstrip())
+        combined = _clean_text(f"{shortened_opening} {compact_cta}")
+        if len(combined) <= TIKTOK_MAX_PHOTO_TITLE_CHARS:
+            return combined
+
+    fallback_parts = [part for part in [opening, _clean_text(meta.title), TIKTOK_SHORT_CTA] if part]
+    for part in fallback_parts:
+        if len(part) <= TIKTOK_MAX_PHOTO_TITLE_CHARS:
+            return _truncate_for_tiktok(part)
+
+    return _truncate_for_tiktok(f"{opening} {TIKTOK_SHORT_CTA}")
+
+
 def generate_caption(meta: VideoMeta) -> str:
+    override = _normalize_multiline_text(str(meta.raw.get("caption_override") or ""))
+    if override:
+        return override
+
     seed = f"{meta.file}|{meta.title}|{meta.angle}|{meta.hook}"
     parts: List[str] = []
 
-    hook = _clean_text(meta.hook or meta.voiceover.splitlines()[0] if meta.voiceover else "")
-    if hook:
-        parts.append(_add_emoji(hook, seed, "hook"))
-    else:
-        parts.append(_add_emoji(_pick(OPENERS, seed, "fallback-open"), seed, "fallback-open"))
+    opening_line = _clean_text(
+        meta.hook or (meta.voiceover.splitlines()[0] if meta.voiceover else "")
+    )
+    if not opening_line:
+        opening_line = _pick(OPENERS, seed, "fallback-open")
+
+    parts.append(_add_emoji(opening_line, seed, "hook"))
 
     opener = _pick(OPENERS, seed, "open")
-    if opener not in parts:
+    if _clean_text(opener) != _clean_text(opening_line):
         parts.append(opener)
 
     if meta.pain:

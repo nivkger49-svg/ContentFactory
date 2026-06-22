@@ -6,6 +6,10 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 
+IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
+CAROUSEL_MANIFEST_NAMES = ("carousel.json", "manifest.json")
+
+
 @dataclass
 class VideoMeta:
     file: str
@@ -49,6 +53,8 @@ def normalize_meta(payload: Dict[str, Any]) -> Optional[VideoMeta]:
         or payload.get("source_video")
         or payload.get("video")
         or payload.get("filename")
+        or payload.get("id")
+        or payload.get("slug")
     )
     if not file_name:
         return None
@@ -115,3 +121,97 @@ def resolve_video_meta_batch(
         get_video_meta(video_path, global_meta, default_language)
         for video_path in video_paths
     ]
+
+
+def _find_carousel_manifest(carousel_dir: Path) -> Optional[Path]:
+    for name in CAROUSEL_MANIFEST_NAMES:
+        candidate = carousel_dir / name
+        if candidate.exists():
+            return candidate
+
+    custom_sidecar = carousel_dir / f"{carousel_dir.name}.creative.json"
+    if custom_sidecar.exists():
+        return custom_sidecar
+    return None
+
+
+def _resolve_slide_path(base_dir: Path, raw_value: str) -> Path:
+    candidate = Path(str(raw_value))
+    if candidate.is_absolute():
+        return candidate
+    return (base_dir / candidate).resolve()
+
+
+def _extract_slide_file(slide: Any) -> Optional[str]:
+    if isinstance(slide, str):
+        return slide
+    if not isinstance(slide, dict):
+        return None
+    for key in ("file", "path", "image", "image_file", "url"):
+        value = slide.get(key)
+        if value:
+            return str(value)
+    return None
+
+
+def _infer_carousel_images(carousel_dir: Path) -> List[Path]:
+    image_root = carousel_dir / "images"
+    search_roots = [image_root, carousel_dir] if image_root.exists() else [carousel_dir]
+    image_paths: List[Path] = []
+    for root in search_roots:
+        for path in sorted(root.iterdir()):
+            if not path.is_file():
+                continue
+            if path.suffix.lower() not in IMAGE_SUFFIXES:
+                continue
+            image_paths.append(path.resolve())
+    return image_paths
+
+
+def load_carousel_meta(
+    carousel_dir: Path,
+    default_language: str,
+) -> tuple[VideoMeta, List[Path]]:
+    manifest_path = _find_carousel_manifest(carousel_dir)
+    payload: Dict[str, Any] = {}
+
+    if manifest_path:
+        raw_payload = _read_json(manifest_path)
+        if not isinstance(raw_payload, dict):
+            raise ValueError(f"Expected an object in {manifest_path}")
+        payload = dict(raw_payload)
+
+    payload.setdefault("file", carousel_dir.name)
+    payload.setdefault("title", carousel_dir.name.replace("_", " ").strip())
+    payload.setdefault("language", default_language)
+
+    meta = normalize_meta(payload)
+    if meta is None:
+        meta = VideoMeta(
+            file=carousel_dir.name,
+            title=carousel_dir.name.replace("_", " ").strip(),
+            language=default_language,
+        )
+
+    slides = payload.get("slides") or payload.get("images") or []
+    image_paths: List[Path] = []
+    if isinstance(slides, list) and slides:
+        for slide in slides:
+            slide_file = _extract_slide_file(slide)
+            if not slide_file:
+                continue
+            image_paths.append(_resolve_slide_path(carousel_dir, slide_file))
+    else:
+        image_paths = _infer_carousel_images(carousel_dir)
+
+    image_paths = [path for path in image_paths if path.exists() and path.is_file()]
+    if len(image_paths) < 2:
+        raise ValueError(
+            f"Carousel {carousel_dir.name} must contain at least 2 images."
+        )
+    if len(image_paths) > 10:
+        raise ValueError(
+            f"Carousel {carousel_dir.name} exceeds Instagram limit of 10 images."
+        )
+
+    return meta, image_paths
