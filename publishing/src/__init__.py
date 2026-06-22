@@ -1,0 +1,1 @@
+"""ContentFactory isolated publishing layer."""

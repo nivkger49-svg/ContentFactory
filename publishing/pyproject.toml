@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "contentfactory-publishing"
+version = "0.1.0"
+description = "Isolated Zernio publishing layer for ContentFactory videos"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "python-dotenv>=1.0.1",
+  "zernio-sdk>=0.1.0",
+]
+
+[tool.setuptools]
+py-modules = [
+  "config",
+  "generate_caption",
+  "logger",
+  "publish_worker",
+  "read_video_meta",
+  "scan_ready_videos",
+  "scheduler",
+  "state_store",
+  "zernio_client",
+]
+
+[tool.setuptools.package-dir]
+"" = "src"
