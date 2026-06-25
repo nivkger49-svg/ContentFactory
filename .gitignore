@@ -98,3 +98,4 @@ publishing/data/*.log
 publishing/data/publishing-state.json
 publishing/data/publishing-queue.json
 publishing/data/published-log.json
+publishing/data/published-comments.json

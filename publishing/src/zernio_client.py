@@ -202,16 +202,23 @@ class ZernioClient:
         title: str,
         content_type: str,
         platform_content: Dict[str, str],
+        platform_first_comments: Optional[Dict[str, str]],
         scheduled_for: Optional[str],
         publish_now: bool,
     ) -> Dict[str, object]:
         platforms = self.get_target_platforms()
         for platform in platforms:
-            if platform["platform"] == "youtube":
+            platform_name = platform["platform"]
+            if platform_name == "youtube":
                 platform["youtubeTitle"] = title
-            custom_content = str(platform_content.get(platform["platform"]) or "").strip()
+            custom_content = str(platform_content.get(platform_name) or "").strip()
             if custom_content:
                 platform["customContent"] = custom_content
+            first_comment = str((platform_first_comments or {}).get(platform_name) or "").strip()
+            if first_comment and platform_name == "instagram":
+                platform["platformSpecificData"] = {
+                    "firstComment": first_comment,
+                }
 
         payload = {
             "content": caption,
@@ -234,3 +241,29 @@ class ZernioClient:
         if content_type == "carousel":
             logger.info("Carousel flow enabled; TikTok uses short customContent when configured.")
         return self._sdk().posts.create(**payload)
+
+    def get_post(self, post_id: str) -> Dict[str, object]:
+        payload = self._sdk().posts.get(post_id)
+        if hasattr(payload, "model_dump"):
+            data = payload.model_dump()
+        elif isinstance(payload, dict):
+            data = payload
+        else:
+            data = {}
+        post = data.get("post") if isinstance(data, dict) else None
+        return post if isinstance(post, dict) else data
+
+    def try_create_post_comment(
+        self,
+        *,
+        platform_post_id: str,
+        account_id: str,
+        message: str,
+    ) -> Dict[str, object]:
+        # Best-effort adapter only. The SDK exposes inbox comment reply methods,
+        # not a guaranteed social-post comment + pin API for reels.
+        return self._sdk().comments.reply_to_inbox_post(
+            post_id=platform_post_id,
+            account_id=account_id,
+            message=message,
+        )

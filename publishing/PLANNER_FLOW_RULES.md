@@ -84,10 +84,10 @@ Module label:
 - Each planned carousel must have a unique Ukrainian caption.
 - Captions should use metadata such as title, hook, pain, angle, offer, and
   voiceover when available.
-- Every caption must end with a CTA that points users to the link in the
-  profile bio.
-- CTA wording should vary across videos, but the action must remain the same:
-  go to the profile bio link.
+- Every caption must end with a CTA that asks users to write `опитування` or
+  `додаток`.
+- CTA wording may vary across videos, but the action must remain the same:
+  write `опитування` or `додаток`.
 - Hashtags may remain consistent if needed, but the main descriptive text and
   CTA should not be duplicated across the planner window.
 - Captions must be written for people, not as a dry visual description of the
@@ -102,6 +102,27 @@ Module label:
   - never turn the caption into emoji-heavy copy
 - Avoid overly generic filler such as empty reassurance without a concrete
   parent insight.
+
+## Instagram First Comment Rules
+
+- For Instagram, the tracked quiz CTA should be attached as the platform first
+  comment whenever the post is still being created or is still editable in the
+  planner.
+- The canonical payload location is:
+  `platforms[].platformSpecificData.firstComment`
+- This is platform-local data, not a top-level post field.
+- The first comment text must use the quiz URL with unique UTM parameters.
+- The module should generate this text before `posts.create` so the same
+  comment body can be:
+  - sent to Zernio in the create payload
+  - stored locally in module state
+- For future scheduled Instagram posts that were created before this rule was
+  added, run:
+  `./.venv-py312/bin/python scripts/retrofit_instagram_first_comments.py`
+- The retrofit script applies only to future scheduled Instagram posts.
+- Already published posts are outside this retrofit path.
+- TikTok currently does not use this field in the validated SDK model, so do
+  not assume Instagram first-comment behavior carries over there.
 
 ## TikTok Carousel Text Rules
 
@@ -151,9 +172,38 @@ Module label:
   `VERCEL_BLOB_TOKEN`.
 - `BLOB_READ_WRITE_TOKEN_READ_WRITE_TOKEN` is accepted as an alias source for
   the same token.
+- `BLOB_STORE_ID` may be supplied explicitly, but if omitted the module will
+  parse the store id from the Blob token.
 - If `VERCEL_BLOB_TOKEN` is missing, the agent must stop before planner
   submission and report that large-file upload is blocked.
 - The SDK also requires the Python package `vercel` in the active environment.
+
+## Blob Buffer Rules
+
+- Vercel Blob is used here as a temporary upload buffer.
+- Active buffer target limit:
+  `BLOB_BUFFER_MAX_BYTES=1073741824`
+- Cleanup cadence:
+  `BLOB_CLEANUP_INTERVAL_DAYS=2`
+- Retention rule:
+  `BLOB_RETENTION_DAYS=2`
+- Cleanup must not delete media for future scheduled planner posts.
+- The module tracks uploaded Blob URLs and sizes under the reserved
+  `_blob_buffer` key in `publishing-state.json`.
+- Cleanup may delete only Blob URLs tracked under `_blob_buffer`.
+- The module must not enumerate the entire store and must not delete unrelated
+  Blob files outside this tracked set.
+- Cleanup eligibility is based on:
+  - `scheduled_for` for scheduled posts
+  - `published_at` for immediate publish runs
+  - `uploaded_at` fallback if upload finished but post creation failed
+- Before a live upload, the worker must estimate projected active Blob usage.
+- If projected usage exceeds the 1 GB limit, the worker must force cleanup
+  before uploading.
+- If usage still exceeds the limit after cleanup, the worker must stop the live
+  run instead of silently overflowing the temporary buffer.
+- Manual cleanup command:
+  `./.venv-py312/bin/python scripts/cleanup_blob_buffer.py --force`
 
 ## Required Environment
 
@@ -162,6 +212,9 @@ Module label:
 - `VERCEL_BLOB_TOKEN` for large videos
 - `READY_CAROUSELS_DIR` for carousel source folders
 - or `BLOB_READ_WRITE_TOKEN_READ_WRITE_TOKEN` as an accepted alias for the same token
+- `BLOB_BUFFER_MAX_BYTES=1073741824`
+- `BLOB_CLEANUP_INTERVAL_DAYS=2`
+- `BLOB_RETENTION_DAYS=2`
 - `PUBLISH_MODE=schedule`
 - `PLANNER_BATCH_SIZE=5`
 - `MAX_POSTS_PER_DAY=2`
@@ -193,6 +246,8 @@ Module label:
   stores queued items waiting for planner submission
 - `data/published-log.json`
   stores append-only planner/publish history
+- `data/published-comments.json`
+  stores generated reel comment UTM records and manual-pin fallbacks
 
 ## Standard Agent Runbook
 
@@ -209,12 +264,19 @@ Module label:
 9. Refresh queued captions so current CTA rules apply.
 10. Build the next planner window of `5` items.
 11. Schedule only `2` posts per day into the next available planner slots.
-12. Upload media through Zernio.
-13. If file size exceeds `4MB`, switch to large upload using Blob token.
-14. Create scheduled Zernio posts, not immediate publishes.
-15. Update `publishing-state.json`, `publishing-queue.json`, and
+12. Run Blob cleanup if due and pre-check the 1 GB buffer limit.
+13. Upload media through Zernio.
+14. If file size exceeds `4MB`, switch to large upload using Blob token.
+15. Track uploaded Blob URLs in `_blob_buffer`.
+16. Create scheduled Zernio posts, not immediate publishes.
+17. For Instagram targets, attach the tracked quiz first comment inside
+    `platformSpecificData.firstComment`.
+18. Update `publishing-state.json`, `publishing-queue.json`, and
     `published-log.json`.
-16. Verify the scheduled items were recorded in state/log.
+19. Verify the scheduled items were recorded in state/log.
+20. For published reels, generate a unique UTM comment record.
+21. If live comment posting/pinning is not supported, save the manual fallback
+    comment payload in `published-comments.json`.
 
 ## Canonical Commands
 
@@ -232,11 +294,32 @@ cd /Users/mister/Documents/ContentFactory/publishing
 ./.venv-py312/bin/python scripts/schedule_all.py
 ```
 
+Retrofit Instagram first comments into already-created future scheduled posts:
+
+```bash
+cd /Users/mister/Documents/ContentFactory/publishing
+./.venv-py312/bin/python scripts/retrofit_instagram_first_comments.py
+```
+
+Manual Blob cleanup:
+
+```bash
+cd /Users/mister/Documents/ContentFactory/publishing
+./.venv-py312/bin/python scripts/cleanup_blob_buffer.py --force
+```
+
 Single immediate publish:
 
 ```bash
 cd /Users/mister/Documents/ContentFactory/publishing
 ./.venv-py312/bin/python scripts/publish_next.py --mode publish
+```
+
+Sync scheduled and published reel comment records:
+
+```bash
+cd /Users/mister/Documents/ContentFactory/publishing
+./.venv-py312/bin/python scripts/sync_reel_comments.py
 ```
 
 ## Known SDK/Adapter Facts
@@ -255,6 +338,12 @@ cd /Users/mister/Documents/ContentFactory/publishing
 - If the scheduling script prints a serialization error after scheduling work,
   verify state/log before retrying because post creation may already have
   succeeded.
+- The current SDK exposes inbox comment methods, but not a proven direct
+  reel-comment pin API.
+- Reel comment automation therefore must be treated as:
+  - scheduled reels get `scheduled_comment_prepared` records
+  - old published reels get `manual_pin_required` records
+  - UTM comment record generation is guaranteed even when pinning is manual
 
 ## Writing Quality Check
 

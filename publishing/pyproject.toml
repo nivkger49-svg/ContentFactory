@@ -15,9 +15,11 @@ dependencies = [
 
 [tool.setuptools]
 py-modules = [
+  "blob_buffer",
   "config",
   "generate_caption",
   "logger",
+  "pinned_comment",
   "publish_worker",
   "read_video_meta",
   "scan_ready_videos",

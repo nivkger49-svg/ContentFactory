@@ -7,9 +7,15 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from zoneinfo import ZoneInfo
 
+from blob_buffer import BlobBufferManager
 from config import Config, load_config
 from generate_caption import generate_caption, generate_tiktok_carousel_caption
 from logger import get_logger
+from pinned_comment import (
+    build_generated_comment,
+    build_planned_comment_text,
+    comment_to_record,
+)
 from read_video_meta import (
     VideoMeta,
     load_carousel_meta,
@@ -19,7 +25,7 @@ from read_video_meta import (
 from scan_ready_carousels import scan_ready_carousels
 from scan_ready_videos import scan_ready_videos
 from scheduler import build_schedule
-from state_store import append_log, load_queue, load_state, save_queue, save_state
+from state_store import append_log, load_json, load_queue, load_state, save_json, save_queue, save_state
 from zernio_client import ZernioClient
 
 
@@ -65,6 +71,8 @@ class PublishWorker:
         self.config = config or load_config()
         self.state = load_state(self.config.state_file)
         self.queue = load_queue(self.config.queue_file)
+        self.comment_log = load_queue(self.config.comment_log_file)
+        self.blob_buffer = BlobBufferManager(self.config, self.state)
         self.client = ZernioClient(self.config)
 
     def scan_and_queue(self) -> List[Dict[str, object]]:
@@ -152,6 +160,7 @@ class PublishWorker:
             logger.info("Draft mode active, Zernio schedule calls skipped.")
             return scheduled_items
 
+        self.blob_buffer.cleanup_if_due()
         results: List[Dict[str, object]] = []
         for item in scheduled_items:
             if self.state.get(item["file"], {}).get("status") == "scheduled":
@@ -168,17 +177,50 @@ class PublishWorker:
             logger.info("Draft mode active, Zernio publish call skipped.")
             return item
 
+        self.blob_buffer.cleanup_if_due()
         return self._send_item(item, publish_now=True)
+
+    def _build_platform_first_comments(
+        self,
+        item: Dict[str, object],
+        publish_now: bool,
+    ) -> Dict[str, str]:
+        reference_at = str(item.get("scheduled_for") or _now_iso(self.config.timezone))
+        if publish_now:
+            reference_at = _now_iso(self.config.timezone)
+
+        return {
+            "instagram": build_planned_comment_text(
+                config=self.config,
+                video_id=str(item["file"]),
+                platform="instagram",
+                reference_at=reference_at,
+            )
+        }
 
     def _send_item(self, item: Dict[str, object], publish_now: bool) -> Dict[str, object]:
         content_type = str(item.get("content_type") or "reel")
         media_items = self._upload_item_media(item, content_type)
+        source_paths = [Path(str(path)) for path in item.get("asset_paths") or []]
+        self.blob_buffer.record_uploaded_media(
+            owner_file=str(item["file"]),
+            source_paths=source_paths,
+            media_items=media_items,
+            content_type=content_type,
+        )
+        self._persist()
+
+        platform_first_comments = self._build_platform_first_comments(
+            item,
+            publish_now=publish_now,
+        )
         response = self.client.create_post(
             caption=str(item["caption"]),
             media_items=media_items,
             title=str(item["title"]),
             content_type=content_type,
             platform_content=item.get("platform_content") or {},
+            platform_first_comments=platform_first_comments,
             scheduled_for=None if publish_now else str(item.get("scheduled_for")),
             publish_now=publish_now,
         )
@@ -197,6 +239,10 @@ class PublishWorker:
             "media_url": media_items[0]["url"],
             "media_urls": [media_item["url"] for media_item in media_items],
         }
+        self.blob_buffer.refresh_owner_state(
+            str(item["file"]),
+            self.state[item["file"]],
+        )
 
         append_log(
             self.config.log_file,
@@ -212,6 +258,16 @@ class PublishWorker:
                 "media_urls": [media_item["url"] for media_item in media_items],
             },
         )
+
+        if content_type == "reel":
+            comment_records = self._handle_reel_comment_records(
+                item=item,
+                post_payload=post_payload if isinstance(post_payload, dict) else {},
+                published_at=_now_iso(self.config.timezone),
+                publish_now=publish_now,
+            )
+            for comment_record in comment_records:
+                self.comment_log.append(comment_record)
 
         self.queue = [queued for queued in self.queue if queued["file"] != item["file"]]
         self._persist()
@@ -263,6 +319,7 @@ class PublishWorker:
                 raise RuntimeError(
                     f"Carousel {item['file']} must contain at least 2 images."
                 )
+            self.blob_buffer.ensure_capacity_for_upload(asset_paths)
             return self.client.upload_media_batch(asset_paths, media_type="image")
 
         video_path_raw = item.get("video_path")
@@ -273,7 +330,88 @@ class PublishWorker:
             video_path_raw = asset_paths[0]
 
         video_path = Path(str(video_path_raw))
+        self.blob_buffer.ensure_capacity_for_upload([video_path])
         return [self.client.upload_media_item(video_path, media_type="video")]
+
+    def cleanup_blob_buffer(self, force: bool = False) -> Dict[str, object]:
+        result = self.blob_buffer.cleanup_if_due(force=force)
+        self._persist()
+        return result
+
+    def sync_reel_comments(self) -> List[Dict[str, object]]:
+        created: List[Dict[str, object]] = []
+        existing_keys = {
+            (str(item.get("video_id")), str(item.get("platform")), str(item.get("post_id")))
+            for item in self.comment_log
+        }
+
+        for file_key, record in self.state.items():
+            if file_key.startswith("_"):
+                continue
+            if str(record.get("content_type") or "reel") != "reel":
+                continue
+
+            for field_name in ("zernio_post_id", "tiktok_zernio_post_id"):
+                post_id = str(record.get(field_name) or "").strip()
+                if not post_id:
+                    continue
+                platform = "tiktok" if field_name == "tiktok_zernio_post_id" else "instagram"
+                key = (file_key, platform, post_id)
+                if key in existing_keys:
+                    continue
+
+                try:
+                    live_post = self.client.get_post(post_id)
+                except Exception as exc:
+                    created.append(
+                        {
+                            "video_id": file_key,
+                            "platform": platform,
+                            "post_id": post_id,
+                            "status": "live_lookup_failed",
+                            "reason": str(exc),
+                        }
+                    )
+                    continue
+
+                live_status = str(live_post.get("status") or "")
+                if live_status not in {"Status9.PUBLISHED", "Status9.SCHEDULED"}:
+                    continue
+
+                scheduled_for = self._extract_post_scheduled_at(live_post)
+                published_at = self._extract_post_published_at(live_post)
+                if live_status == "Status9.SCHEDULED":
+                    reference_at = scheduled_for or record.get("scheduled_for") or _now_iso(self.config.timezone)
+                    comment_record = self._build_reel_comment_record(
+                        video_id=file_key,
+                        platform=platform,
+                        post_id=post_id,
+                        post_payload=live_post,
+                        reference_at=str(reference_at),
+                        status="scheduled_comment_prepared",
+                        scheduled_for=str(scheduled_for or record.get("scheduled_for") or ""),
+                        published_at=None,
+                        allow_live_comment_publish=False,
+                    )
+                else:
+                    reference_at = published_at or scheduled_for or _now_iso(self.config.timezone)
+                    comment_record = self._build_reel_comment_record(
+                        video_id=file_key,
+                        platform=platform,
+                        post_id=post_id,
+                        post_payload=live_post,
+                        reference_at=str(reference_at),
+                        status="manual_pin_required",
+                        scheduled_for=str(scheduled_for or record.get("scheduled_for") or ""),
+                        published_at=str(published_at or ""),
+                        allow_live_comment_publish=False,
+                    )
+                self.comment_log.append(comment_record)
+                existing_keys.add(key)
+                created.append(comment_record)
+
+        self._persist()
+        return created
 
     def _refresh_existing_queue(self) -> None:
         if not self.queue:
@@ -334,3 +472,116 @@ class PublishWorker:
     def _persist(self) -> None:
         save_state(self.config.state_file, self.state)
         save_queue(self.config.queue_file, self.queue)
+        save_queue(self.config.comment_log_file, self.comment_log)
+
+    def _handle_reel_comment_records(
+        self,
+        *,
+        item: Dict[str, object],
+        post_payload: Dict[str, object],
+        published_at: str,
+        publish_now: bool,
+    ) -> List[Dict[str, object]]:
+        if not publish_now:
+            return []
+
+        zernio_post_id = str(_response_get(post_payload, "field_id") or _response_get(post_payload, "id") or "").strip()
+        if not zernio_post_id:
+            return []
+
+        records: List[Dict[str, object]] = []
+        for platform_payload in post_payload.get("platforms", []) if isinstance(post_payload.get("platforms"), list) else []:
+            platform = str(platform_payload.get("platform") or "").strip().lower()
+            if platform not in {"instagram", "facebook", "tiktok"}:
+                continue
+            records.append(
+                self._build_reel_comment_record(
+                    video_id=str(item["file"]),
+                    platform=platform,
+                    post_id=zernio_post_id,
+                    post_payload=platform_payload,
+                    reference_at=published_at,
+                    scheduled_for=str(item.get("scheduled_for") or ""),
+                    published_at=published_at,
+                )
+            )
+        return records
+
+    def _build_reel_comment_record(
+        self,
+        *,
+        video_id: str,
+        platform: str,
+        post_id: str,
+        post_payload: Dict[str, object],
+        reference_at: str,
+        status: str,
+        scheduled_for: Optional[str],
+        published_at: Optional[str],
+        allow_live_comment_publish: bool,
+    ) -> Dict[str, object]:
+        account_id = _response_get(post_payload.get("accountId") if isinstance(post_payload.get("accountId"), dict) else post_payload, "field_id", "id")
+        platform_post_id = str(post_payload.get("platformPostId") or "").strip() or None
+        platform_post_url = str(post_payload.get("platformPostUrl") or "").strip() or None
+
+        reason = "pin_api_not_supported"
+        comment_id = None
+        pinned = False
+        manual_pin_required = True
+        pin_supported = False
+
+        if allow_live_comment_publish and platform_post_id and account_id:
+            try:
+                comment_response = self.client.try_create_post_comment(
+                    platform_post_id=platform_post_id,
+                    account_id=str(account_id),
+                    message=build_generated_comment(
+                        config=self.config,
+                        video_id=video_id,
+                        platform=platform,
+                        post_id=post_id,
+                        reference_at=reference_at,
+                        status="pending_comment_publish",
+                        scheduled_for=scheduled_for,
+                        published_at=published_at,
+                    ).text,
+                )
+                comment_id = str(_response_get(comment_response, "id", "_id", "commentId") or "").strip() or None
+                status = "comment_published_manual_pin_required"
+                reason = "comment_created_but_pin_api_not_supported"
+            except Exception as exc:
+                status = "manual_pin_required"
+                reason = f"comment_api_unavailable: {exc}"
+
+        comment = build_generated_comment(
+            config=self.config,
+            video_id=video_id,
+            platform=platform,
+            post_id=post_id,
+            reference_at=reference_at,
+            status=status,
+            scheduled_for=scheduled_for,
+            published_at=published_at,
+            reason=reason,
+            comment_id=comment_id,
+            pinned=pinned,
+            manual_pin_required=manual_pin_required,
+            pin_supported=pin_supported,
+            platform_post_id=platform_post_id,
+            platform_post_url=platform_post_url,
+        )
+        return comment_to_record(comment)
+
+    def _extract_post_published_at(self, post_payload: Dict[str, object]) -> Optional[str]:
+        platforms = post_payload.get("platforms")
+        if isinstance(platforms, list):
+            for platform_payload in platforms:
+                published_at = platform_payload.get("publishedAt")
+                if published_at:
+                    return str(published_at).replace(" ", "T")
+        created_at = post_payload.get("updatedAt") or post_payload.get("createdAt")
+        return str(created_at).replace(" ", "T") if created_at else None
+
+    def _extract_post_scheduled_at(self, post_payload: Dict[str, object]) -> Optional[str]:
+        scheduled_for = post_payload.get("scheduledFor")
+        return str(scheduled_for).replace(" ", "T") if scheduled_for else None

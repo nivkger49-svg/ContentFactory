@@ -39,6 +39,16 @@ class Config:
     zernio_api_key: Optional[str]
     zernio_profile_id: Optional[str]
     vercel_blob_token: Optional[str]
+    vercel_blob_store_id: Optional[str]
+    vercel_blob_api_url: str
+    blob_buffer_max_bytes: int
+    blob_cleanup_interval_days: int
+    blob_retention_days: int
+    comment_base_url: str
+    comment_utm_source: str
+    comment_utm_medium: str
+    comment_utm_campaign: str
+    comment_log_file: Path
     state_file: Path
     queue_file: Path
     log_file: Path
@@ -114,6 +124,33 @@ def load_config() -> Config:
             or os.getenv("BLOB_READ_WRITE_TOKEN_READ_WRITE_TOKEN")
             or None
         ),
+        vercel_blob_store_id=(
+            os.getenv("BLOB_STORE_ID")
+            or os.getenv("BLOB_READ_WRITE_TOKEN_STORE_ID")
+            or None
+        ),
+        vercel_blob_api_url=(
+            os.getenv("VERCEL_BLOB_API_URL", "https://vercel.com/api/blob").strip()
+            or "https://vercel.com/api/blob"
+        ),
+        blob_buffer_max_bytes=int(
+            os.getenv("BLOB_BUFFER_MAX_BYTES", str(1024 * 1024 * 1024))
+        ),
+        blob_cleanup_interval_days=int(
+            os.getenv("BLOB_CLEANUP_INTERVAL_DAYS", "2")
+        ),
+        blob_retention_days=int(os.getenv("BLOB_RETENTION_DAYS", "2")),
+        comment_base_url=(
+            os.getenv(
+                "COMMENT_BASE_URL",
+                "https://mamabezkriku.com/public/vash-profil/",
+            ).strip()
+            or "https://mamabezkriku.com/public/vash-profil/"
+        ),
+        comment_utm_source=os.getenv("COMMENT_UTM_SOURCE", "facebook").strip() or "facebook",
+        comment_utm_medium=os.getenv("COMMENT_UTM_MEDIUM", "comment").strip() or "comment",
+        comment_utm_campaign=os.getenv("COMMENT_UTM_CAMPAIGN", "organic").strip() or "organic",
+        comment_log_file=data_dir / "published-comments.json",
         state_file=data_dir / "publishing-state.json",
         queue_file=data_dir / "publishing-queue.json",
         log_file=data_dir / "published-log.json",

@@ -7,9 +7,9 @@ from read_video_meta import VideoMeta
 
 
 CTA_MAP = {
-    "LEARN_MORE": "Переходьте за посиланням у шапці профілю, щоб пройти коротке опитування і отримати персональні рекомендації.",
-    "SIGN_UP": "Зайдіть у шапку профілю та пройдіть коротке опитування, щоб отримати персональний план вправ.",
-    "GET_STARTED": "Відкрийте посилання в шапці профілю та отримайте персональні вправи для вашої дитини.",
+    "LEARN_MORE": "Хочете, щоб застосунок підібрав вправи саме під вашу дитину? 🌿 Напишіть «опитування» або «додаток».",
+    "SIGN_UP": "Хочете отримати вправи, підібрані саме під вашу дитину? ✨ Напишіть «опитування» або «додаток».",
+    "GET_STARTED": "Щоб застосунок підібрав вправи саме під вашу дитину 💛 напишіть «опитування» або «додаток».",
 }
 
 EMOJI_BEATS = ["✨", "🤍", "🌿", "💛", "🫶", "🌙"]
@@ -45,20 +45,20 @@ HASHTAGS = [
 ]
 
 BIO_CTA_VARIANTS = [
-    "Перейдіть за посиланням у шапці профілю, щоб отримати персональні рекомендації саме для вашої дитини.",
-    "Посилання в шапці профілю допоможе вам пройти коротке опитування та підібрати вправи під стан дитини.",
-    "Зайдіть у шапку профілю та отримайте підбірку вправ, яка відповідає саме вашій ситуації.",
-    "У шапці профілю є коротке опитування, після якого ви отримаєте персональний маршрут підтримки для дитини.",
-    "Тисніть на посилання в шапці профілю, щоб отримати вправи та рекомендації під потреби вашої дитини.",
+    "Хочете, щоб застосунок підібрав вправи саме під вашу дитину? 🌿 Напишіть «опитування» або «додаток».",
+    "Якщо хочете, щоб застосунок підібрав вправи саме під вашу дитину 🌿 напишіть «опитування» або «додаток».",
+    "Хочете отримати вправи, підібрані саме під вашу дитину? ✨ Напишіть «опитування» або «додаток».",
+    "Щоб застосунок підібрав вправи саме під вашу дитину 💛 напишіть «опитування» або «додаток».",
+    "Хочете, щоб вправи були підібрані саме під вашу дитину? 🌱 Напишіть «опитування» або «додаток».",
 ]
 
 CTA_FOLLOWUP_VARIANTS = [
-    "Там ви зможете пройти коротке опитування й отримати персональні рекомендації.",
-    "Там на вас чекає коротке опитування і персональний маршрут підтримки.",
-    "Саме там можна швидко підібрати вправи під вашу ситуацію.",
+    "Напишіть «опитування» або «додаток», і застосунок підбере вправи саме під вашу дитину.",
+    "Напишіть «опитування» або «додаток», щоб отримати вправи саме під вашу дитину.",
+    "Напишіть «опитування» або «додаток» — і застосунок підкаже, що підійде саме вашій дитині.",
 ]
 
-TIKTOK_SHORT_CTA = "Посилання в шапці профілю."
+TIKTOK_SHORT_CTA = "Напишіть «опитування» або «додаток»."
 TIKTOK_MAX_PHOTO_TITLE_CHARS = 90
 
 
@@ -87,9 +87,12 @@ def _resolve_cta(meta: VideoMeta) -> str:
     if meta.cta:
         base_cta = _clean_text(meta.cta)
         lower_cta = base_cta.lower()
-        if "шап" in lower_cta and "проф" in lower_cta:
-            followup = _pick(CTA_FOLLOWUP_VARIANTS, seed, "cta-followup")
-            return f"{base_cta.rstrip('.')} — {followup}"
+        if (
+            ("шап" in lower_cta and "проф" in lower_cta)
+            or "опитув" in lower_cta
+            or "додат" in lower_cta
+        ):
+            return bio_cta
         return f"{base_cta} {bio_cta}"
     return bio_cta
 
@@ -97,6 +100,55 @@ def _resolve_cta(meta: VideoMeta) -> str:
 def _normalize_multiline_text(value: str) -> str:
     lines = [line.strip() for line in str(value or "").splitlines() if line.strip()]
     return "\n\n".join(lines)
+
+
+def _looks_like_legacy_cta(paragraph: str) -> bool:
+    lower = _clean_text(paragraph).lower()
+    if not lower:
+        return False
+    signals = (
+        "шапці профілю",
+        "шапку профілю",
+        "перейдіть за посиланням",
+        "пройти коротке опитування",
+        "персональні рекомендації",
+        "саме вашої дитини",
+        "саме під вашу дитину",
+        "напишіть «опитування»",
+        "напишіть «додаток»",
+    )
+    return any(signal in lower for signal in signals)
+
+
+def _replace_legacy_cta(text: str, meta: VideoMeta) -> str:
+    normalized = _normalize_multiline_text(text)
+    if not normalized:
+        return normalized
+
+    paragraphs = [part.strip() for part in normalized.split("\n\n") if part.strip()]
+    if not paragraphs:
+        return normalized
+
+    hashtag_index = None
+    for idx, paragraph in enumerate(paragraphs):
+        if paragraph.lstrip().startswith("#"):
+            hashtag_index = idx
+            break
+
+    body = paragraphs if hashtag_index is None else paragraphs[:hashtag_index]
+    hashtags = [] if hashtag_index is None else paragraphs[hashtag_index:]
+
+    replaced = False
+    for idx in range(len(body) - 1, -1, -1):
+        if _looks_like_legacy_cta(body[idx]):
+            body[idx] = _resolve_cta(meta)
+            replaced = True
+            break
+
+    if not replaced:
+        body.append(_resolve_cta(meta))
+
+    return "\n\n".join(body + hashtags)
 
 
 def _truncate_for_tiktok(text: str) -> str:
@@ -155,7 +207,7 @@ def generate_tiktok_carousel_caption(meta: VideoMeta) -> str:
 def generate_caption(meta: VideoMeta) -> str:
     override = _normalize_multiline_text(str(meta.raw.get("caption_override") or ""))
     if override:
-        return override
+        return _replace_legacy_cta(override, meta)
 
     seed = f"{meta.file}|{meta.title}|{meta.angle}|{meta.hook}"
     parts: List[str] = []
